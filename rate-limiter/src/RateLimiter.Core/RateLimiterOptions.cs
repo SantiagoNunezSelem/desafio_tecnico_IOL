@@ -14,4 +14,22 @@ public sealed class RateLimiterOptions
     public int Limit { get; set; }
 
     public TimeSpan Window { get; set; }
+
+    public void Validate()
+    {
+        if (!Enum.IsDefined(Algorithm))
+        {
+            throw new ArgumentOutOfRangeException(nameof(Algorithm), Algorithm, "Unknown algorithm.");
+        }
+
+        if (Limit <= 0)
+        {
+            throw new ArgumentOutOfRangeException(nameof(Limit), Limit, "Limit must be positive.");
+        }
+
+        if (Window <= TimeSpan.Zero)
+        {
+            throw new ArgumentOutOfRangeException(nameof(Window), Window, "Window must be positive.");
+        }
+    }
 }

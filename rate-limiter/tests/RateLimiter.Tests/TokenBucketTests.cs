@@ -10,7 +10,7 @@ public class TokenBucketTests
     private readonly FakeTimeProvider _time = new();
 
     private TokenBucket CreateBucket(int capacity, double refillRatePerSecond) =>
-        new(new TokenBucketOptions(capacity, refillRatePerSecond), _time);
+        new TokenBucket(capacity, refillRatePerSecond, _time);
 
     private void Drain(TokenBucket bucket)
     {
@@ -136,5 +136,21 @@ public class TokenBucketTests
 
         // Se valida si la concurrencia no genero inconsistencias en la cantidad de tokens disponibles.
         Assert.Equal(capacity, allowed);
+    }
+
+    [Theory]
+    [InlineData(0)]
+    [InlineData(-1)]
+    public void NonPositiveCapacity_IsRejected(int capacity)
+    {
+        Assert.Throws<ArgumentOutOfRangeException>(() => CreateBucket(capacity, refillRatePerSecond: 1));
+    }
+
+    [Theory]
+    [InlineData(0)]
+    [InlineData(-1)]
+    public void NonPositiveRefillRate_IsRejected(double refillRatePerSecond)
+    {
+        Assert.Throws<ArgumentOutOfRangeException>(() => CreateBucket(capacity: 1, refillRatePerSecond));
     }
 }

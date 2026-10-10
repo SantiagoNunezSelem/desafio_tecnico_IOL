@@ -11,7 +11,8 @@ namespace RateLimiter.Core;
 // ya paso el 30% del minuto actual. Estimado = 3 + 5 * 0.7 = 6.5
 public class SlidingWindowCounter : IRateLimiter
 {
-    private readonly SlidingWindowCounterOptions _options;
+    private readonly int _limit;            // Cantidad maxima de requests permitidos dentro de una ventana
+    private readonly TimeSpan _window;      // Duracion de la ventana
     private readonly TimeProvider _timeProvider;
     private readonly object _lock = new();
 
@@ -22,9 +23,20 @@ public class SlidingWindowCounter : IRateLimiter
     private int _currentCount;      // Requests ventana actual
     private int _previousCount;     // Requests ventana anterior
 
-    public SlidingWindowCounter(SlidingWindowCounterOptions options, TimeProvider timeProvider)
+    public SlidingWindowCounter(int limit, TimeSpan window, TimeProvider timeProvider)
     {
-        _options = options;
+        if (limit <= 0)
+        {
+            throw new ArgumentOutOfRangeException(nameof(limit), limit, "Limit must be positive.");
+        }
+
+        if (window <= TimeSpan.Zero)
+        {
+            throw new ArgumentOutOfRangeException(nameof(window), window, "Window must be positive.");
+        }
+
+        _limit = limit;
+        _window = window;
         _timeProvider = timeProvider;
         _startTimestamp = timeProvider.GetTimestamp();
     }
@@ -38,25 +50,25 @@ public class SlidingWindowCounter : IRateLimiter
             TimeSpan elapsed = _timeProvider.GetElapsedTime(_startTimestamp);
 
             // Numero de ventana actual: cuantas ventanas completas pasaron desde el inicio
-            long currentWindow = elapsed.Ticks / _options.Window.Ticks;
+            long currentWindow = elapsed.Ticks / _window.Ticks;
             MoveToWindow(currentWindow);
 
             // Fraccion de la ventana actual que ya transcurrio. 0 al comenzar y tiende a 1 al terminar
-            double elapsedCurrentFraction = (double)(elapsed.Ticks % _options.Window.Ticks) / _options.Window.Ticks;
+            double elapsedCurrentFraction = (double)(elapsed.Ticks % _window.Ticks) / _window.Ticks;
             // Fraccion de la ventana anterior que todavia esta dentro de la ventana deslizante
             double previousWindowFraction = 1 - elapsedCurrentFraction;
 
             double estimated = _currentCount + _previousCount * previousWindowFraction;
 
             // Se rechaza si, contando este request, el estimado de la ventana deslizante supera el limite
-            if (estimated + 1 > _options.Limit)
+            if (estimated + 1 > _limit)
             {
-                return new RateLimitDecision(false, _options.Limit, 0, GetRetryAfter(elapsedCurrentFraction));
+                return new RateLimitDecision(false, _limit, 0, GetRetryAfter(elapsedCurrentFraction));
             }
 
             _currentCount++;
-            int remaining = (int)(_options.Limit - estimated - 1);
-            return new RateLimitDecision(true, _options.Limit, remaining, TimeSpan.Zero);
+            int remaining = (int)(_limit - estimated - 1);
+            return new RateLimitDecision(true, _limit, remaining, TimeSpan.Zero);
         }
     }
 
@@ -81,15 +93,15 @@ public class SlidingWindowCounter : IRateLimiter
     {
         // La ventana actual ya esta llena: hay que esperar a que termine. En la siguiente, estos
         // requests pasan a ser "la anterior" y se libera un lugar cada (ventana / limite).
-        if (_currentCount == _options.Limit)
+        if (_currentCount == _limit)
         {
-            return _options.Window * (1 - elapsedFraction) + _options.Window / _options.Limit;
+            return _window * (1 - elapsedFraction) + _window / _limit;
         }
 
         // Lo que sobra viene de la ventana anterior, que pesa cada vez menos. Se despeja de la
         // formula del estimado en que momento de la ventana actual queda libre un lugar.
-        int freeSlots = _options.Limit - 1 - _currentCount;
+        int freeSlots = _limit - 1 - _currentCount;
         double neededFraction = 1 - (double)freeSlots / _previousCount;
-        return _options.Window * (neededFraction - elapsedFraction);
+        return _window * (neededFraction - elapsedFraction);
     }
 }

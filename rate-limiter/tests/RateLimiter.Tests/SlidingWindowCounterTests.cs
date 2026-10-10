@@ -8,7 +8,7 @@ public class SlidingWindowCounterTests
     private readonly FakeTimeProvider _time = new();
 
     private SlidingWindowCounter CreateLimiter(int limit, TimeSpan window) =>
-        new(new SlidingWindowCounterOptions(limit, window), _time);
+        new SlidingWindowCounter(limit, window, _time);
 
     private void Consume(SlidingWindowCounter limiter, int requests)
     {
@@ -137,5 +137,21 @@ public class SlidingWindowCounterTests
             .Count(request => limiter.TryConsume().IsAllowed);
 
         Assert.Equal(limit, allowed);
+    }
+
+    [Theory]
+    [InlineData(0)]
+    [InlineData(-1)]
+    public void NonPositiveLimit_IsRejected(int limit)
+    {
+        Assert.Throws<ArgumentOutOfRangeException>(() => CreateLimiter(limit, TimeSpan.FromMinutes(1)));
+    }
+
+    [Theory]
+    [InlineData(0)]
+    [InlineData(-1)]
+    public void NonPositiveWindow_IsRejected(int windowSeconds)
+    {
+        Assert.Throws<ArgumentOutOfRangeException>(() => CreateLimiter(limit: 1, TimeSpan.FromSeconds(windowSeconds)));
     }
 }
