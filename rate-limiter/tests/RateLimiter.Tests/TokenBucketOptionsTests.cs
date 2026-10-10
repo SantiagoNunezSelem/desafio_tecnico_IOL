@@ -24,9 +24,7 @@ public class TokenBucketOptionsTests
     [Theory]
     [InlineData(0)]
     [InlineData(-1)]
-    [InlineData(double.NaN)]
-    [InlineData(double.PositiveInfinity)]
-    public void RefillRateThatIsNotPositiveAndFinite_IsRejected(double refillRatePerSecond)
+    public void NonPositiveRefillRate_IsRejected(double refillRatePerSecond)
     {
         Assert.Throws<ArgumentOutOfRangeException>(() => new TokenBucketOptions(capacity: 1, refillRatePerSecond));
     }

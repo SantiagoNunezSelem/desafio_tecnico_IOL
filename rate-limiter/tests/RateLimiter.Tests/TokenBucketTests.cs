@@ -5,13 +5,14 @@ namespace RateLimiter.Tests;
 
 public class TokenBucketTests
 {
-    // A clock that only moves when a test calls Advance, so no test sleeps or depends on timing.
+    // Para los test se usa un reloj falso. El mismo no avanza hasta que nosotros lo indiquemos.
+    // Hace que no tengamos que esperar x segundos para no demorar los tests.
     private readonly FakeTimeProvider _time = new();
 
     private TokenBucket CreateBucket(int capacity, double refillRatePerSecond) =>
         new(new TokenBucketOptions(capacity, refillRatePerSecond), _time);
 
-    private static void Drain(TokenBucket bucket) // Santi: y porque esto es estatico?
+    private void Drain(TokenBucket bucket)
     {
         while (bucket.TryConsume().IsAllowed)
         {
@@ -84,7 +85,6 @@ public class TokenBucketTests
         TokenBucket bucket = CreateBucket(capacity: 1, refillRatePerSecond: 2);
         Drain(bucket);
 
-        // Half of the 500 ms needed for one token has already passed.
         _time.Advance(TimeSpan.FromMilliseconds(250));
 
         RateLimitDecision decision = bucket.TryConsume();
@@ -110,7 +110,6 @@ public class TokenBucketTests
         TokenBucket bucket = CreateBucket(capacity: 1, refillRatePerSecond: 1);
         Drain(bucket);
 
-        // A client hammering the limiter while it is empty must not be penalised further.
         for (int i = 0; i < 9; i++)
         {
             _time.Advance(TimeSpan.FromMilliseconds(100));
@@ -127,17 +126,15 @@ public class TokenBucketTests
     {
         const int capacity = 100;
         TokenBucket bucket = CreateBucket(capacity, refillRatePerSecond: 1);
-        int allowed = 0;
+        int allowed = 0; // Cantidad de request validas
 
-        // The fake clock is frozen, so no tokens are refilled while the requests race.
-        Parallel.For(0, 10_000, _ =>
-        {
-            if (bucket.TryConsume().IsAllowed)
-            {
-                Interlocked.Increment(ref allowed);
-            }
-        });
+        // Dejamos el reloj congelado asi trabajamos con los 100 tokens
 
+        allowed = Enumerable.Range(0, 10_000) // Genera 10.000 elementos (uno por request)
+            .AsParallel()
+            .Count(request => bucket.TryConsume().IsAllowed); // Cuenta los request exitosos
+
+        // Se valida si la concurrencia no genero inconsistencias en la cantidad de tokens disponibles.
         Assert.Equal(capacity, allowed);
     }
 }
