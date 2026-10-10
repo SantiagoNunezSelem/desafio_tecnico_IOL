@@ -11,9 +11,9 @@ Project("{2150E333-8FDC-42A3-9474-1A3956D46DE8}") = "tests", "tests", "{4712DCDF
 EndProject
 Project("{9A19103F-16F7-4668-BE54-9A1E7A4F7556}") = "RateLimiter.Tests", "tests\RateLimiter.Tests\RateLimiter.Tests.csproj", "{32F0130C-E56A-4920-9148-C51079BCDC57}"
 EndProject
-Project("{2150E333-8FDC-42A3-9474-1A3956D46DE8}") = "Solution Items", "Solution Items", "{DF102A39-111E-4ED1-806C-0022B08D3F68}"
+Project("{2150E333-8FDC-42A3-9474-1A3956D46DE8}") = "Solution Items", "Solution Items", "{313F18E9-CCD0-4D1E-88A9-21F184C6C5E9}"
 	ProjectSection(SolutionItems) = preProject
-		src\DESIGN.md = src\DESIGN.md
+		DESIGN.md = DESIGN.md
 	EndProjectSection
 EndProject
 Global
