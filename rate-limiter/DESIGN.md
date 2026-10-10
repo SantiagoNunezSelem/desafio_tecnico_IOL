@@ -87,6 +87,13 @@ El sliding window counter mantiene el total cerca de 5 en cualquier minuto.
 - Un `lock` por limitador. Leer el estado, decidir y actualizar tiene que ser un solo paso. Sino dos requests simultáneos podrían generar races conditions. Como cada cliente va a tener su propio limitador, clientes distintos no se bloquean entre sí.
 - Los tests usan un reloj falso que avanza solo cuando se lo indican, por lo que no esperan tiempo real.
 
+## Registro de limitadores por cliente
+
+- Un limitador por cliente, creado con el primer request de ese cliente.
+- Un `Dictionary` protegido por un `lock`, en lugar de un `ConcurrentDictionary`. El lock cubre solo buscar el limitador y marcarlo como usado. El consumo se hace afuera, con el lock propio de cada rate limiter. Con un `ConcurrentDictionary` la limpieza podría eliminar un limitador justo cuando otro request lo está por usar, y ese request se perdería. El costo es que todos los requests pasan por un mismo lock, aunque por muy poco tiempo. Si eso se volviera un cuello de botella, se podría dividir el diccionario en varios, cada uno con su lock.
+- Un rate limiter se elimina cuando pasa dos ventanas sin requests. En ese tiempo los dos algoritmos vuelven a su estado inicial.
+- La limpieza no usa un timer ni un hilo en segundo plano. Se ejecuta durante un request, como mucho una vez cada dos ventanas. El costo es que ese request recorre todo el diccionario, y que si no llega ningún request no se libera memoria.
+
 
 # Alternativas consideradas (librería de Microsoft)
 
