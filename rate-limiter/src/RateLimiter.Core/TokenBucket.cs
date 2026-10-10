@@ -1,6 +1,6 @@
 namespace RateLimiter.Core;
 
-public class TokenBucket
+public class TokenBucket : IRateLimiter
 {
     private readonly TokenBucketOptions _options;
     private readonly TimeProvider _timeProvider;
