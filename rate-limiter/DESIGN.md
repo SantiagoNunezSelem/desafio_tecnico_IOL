@@ -74,6 +74,10 @@ Clases de `RateLimiter.Core`:
 - `RateLimiterFactory`: crea el algoritmo que indica la regla.
 - `RateLimiterRegistry`: mantiene un rate limiter por cliente y elimina los inactivos.
 
+Diagrama de clases (UML):
+
+![Diagrama de clases](class-diagram.png)
+
 # Decisiones
 
 ## Token Bucket
