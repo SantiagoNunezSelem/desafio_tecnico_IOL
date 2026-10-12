@@ -173,3 +173,28 @@ La regla se cambia en `src/RateLimiter.Api/appsettings.json`:
 - `Limit`: cantidad de requests permitidos por ventana.
 - `Window`: duración de la ventana, en formato `hh:mm:ss`.
 
+## Con Docker (opcional)
+
+No hace falta tener .NET instalado, solo Docker. Desde la carpeta `rate-limiter`:
+
+Construir la imagen:
+
+```
+docker build -t rate-limiter .
+```
+
+Levantar la API (queda escuchando en `http://localhost:5277`):
+
+```
+docker run --rm -p 5277:8080 rate-limiter
+```
+
+La regla se puede cambiar al levantar el contenedor con variables de entorno, sin reconstruir la imagen:
+
+```
+docker run --rm -p 5277:8080 -e RateLimiter__Algorithm=SlidingWindowCounter -e RateLimiter__Limit=2 rate-limiter
+```
+
+El `Dockerfile` tiene dos etapas: la primera compila la API con el SDK de .NET y la segunda copia solo el resultado a una imagen que tiene únicamente el runtime. La imagen contiene la API, no los tests.
+
+Todos los requests enviados desde la máquina local llegan al contenedor con la misma IP (la de la red interna de Docker), por lo que comparten un mismo límite.

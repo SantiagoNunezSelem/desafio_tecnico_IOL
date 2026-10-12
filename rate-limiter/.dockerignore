@@ -1,0 +1,4 @@
+# Carpetas generadas al compilar en la maquina local. No se copian a la imagen
+# porque la compilacion se hace de nuevo dentro del contenedor.
+**/bin/
+**/obj/
