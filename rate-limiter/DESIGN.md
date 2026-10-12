@@ -17,13 +17,12 @@ Seleccione este proyecto debido a que de las opciones disponibles es el problema
 Rechazar los request que superan el límite configurado con respuestas de baja latencia y utilizando poca memoria.
 Informar al cliente cuando recibe un rechazo (HTTP 429 y headers con el estado del límite).
 Las reglas deben ser configurables y que el algoritmo se pueda elegir (voy a implementar 2 para comparar).
-Permitir compartir el estado entre varias instancias utilizando Redis. Esto sera opcional para el usario ya que requiere tener docker instalado.
 
 # Utilizacion de IA
 
 En el transcurso del desafío me acompaño utilizando Claude Code. La idea es aprovecharla para escribir gran parte del código, y que mi rol sea controlar los avances, comprender las implementaciones, corregir cuando haga falta y tomar las decisiones estructurales.
 
-Para poder controlar los avances y gestionar las decisiones, el código se desarrolla en 5 etapas. En cada una reviso el código, hago preguntas hasta entenderlo y dejo comentarios propios en lo que necesite aclarar.
+Para poder controlar los avances y gestionar las decisiones, el código se desarrolla en 4 etapas. En cada una reviso el código, hago preguntas hasta entenderlo y dejo comentarios propios en lo que necesite aclarar.
 
 # Etapas de desarrollo
 
@@ -47,14 +46,33 @@ Se implementa una API web con ASP.NET Core y un middleware que consulta al regis
 Se implementa el proceso para aceptar o rechazar request, indicandole al usuario el estado e informacion correspondiente.
 Se implementan los test correspondientes, incluyendo los necesarios para levantar la API en memoria.
 
-## 5) Implementar Redis
-Se implementa un almacenamiento de estado en Redis, para que varias instancias de la aplicacion compartan los mismos contadores y el limite se aplique sobre el total de requests, no por instancia.
-Debido a que desconozco si la persona que pruebe mi proyecto tendra intalado Docker, esta opcion se activara por configuracion. Por default esta opcion no estara habilitada.
-Se implementan también los test correspondientes.
-
 # Arquitectura
 
-[completar al final del proyecto]
+La solución tiene tres proyectos:
+
+- `src/RateLimiter.Core`: la lógica del rate limiter. No depende de ASP.NET ni de HTTP.
+- `src/RateLimiter.Api`: la API web con el middleware y un endpoint de ejemplo (`GET /ping`).
+- `tests/RateLimiter.Tests`: los tests de los dos proyectos anteriores.
+
+Recorrido de un request:
+
+1. El cliente envía un request a la API, por ejemplo `GET /ping`.
+2. El request llega primero a `RateLimitMiddleware`, que obtiene la IP del cliente.
+3. El middleware le pregunta a `RateLimiterRegistry` si ese cliente puede hacer el request.
+4. El registro busca el rate limiter de ese cliente. Si no existe, lo crea.
+5. El rate limiter (`TokenBucket` o `SlidingWindowCounter`, según la configuración) decide si el request se acepta y devuelve un `RateLimitDecision`.
+6. El middleware lee esa decisión y agrega los headers con el estado del límite.
+7. Si el request fue aceptado, sigue hacia el endpoint y se responde 200.
+8. Si fue rechazado, el middleware responde 429 y el request no llega al endpoint.
+
+Clases de `RateLimiter.Core`:
+
+- `IRateLimiter`: la interfaz que implementan los dos algoritmos.
+- `TokenBucket` y `SlidingWindowCounter`: los algoritmos. Cada instancia limita a un solo cliente.
+- `RateLimitDecision`: el resultado de consultar a un rate limiter (aceptado o no, límite, restantes y tiempo de espera).
+- `RateLimiterOptions`: la regla de configuración (algoritmo, límite y ventana).
+- `RateLimiterFactory`: crea el algoritmo que indica la regla.
+- `RateLimiterRegistry`: mantiene un rate limiter por cliente y elimina los inactivos.
 
 # Decisiones
 
@@ -94,6 +112,16 @@ El sliding window counter mantiene el total cerca de 5 en cualquier minuto.
 - Un rate limiter se elimina cuando pasa dos ventanas sin requests. En ese tiempo los dos algoritmos vuelven a su estado inicial.
 - La limpieza no usa un timer ni un hilo en segundo plano. Se ejecuta durante un request, como mucho una vez cada dos ventanas. El costo es que ese request recorre todo el diccionario, y que si no llega ningún request no se libera memoria.
 
+## Middleware HTTP
+
+- El rate limiter es un middleware y no código dentro de cada endpoint. Se ejecuta antes que cualquier endpoint, por lo que un request rechazado no llega a consumir recursos de la aplicación y los endpoints no saben que existe.
+- El cliente se identifica por su dirección IP. Si la API estuviera detrás de un proxy, todos los requests llegarían con la IP del proxy y habría que leer el header `X-Forwarded-For`, confiando solo en proxies conocidos. No lo implementé porque depende de la infraestructura. Con usuarios autenticados convendría usar el id de usuario.
+- Si no se puede obtener la IP, esos requests comparten un mismo límite. Preferí eso antes que dejarlos sin limitar.
+- Los headers `X-Ratelimit-Limit` y `X-Ratelimit-Remaining` se envían en todas las respuestas. En un rechazo se responde HTTP 429 con `X-Ratelimit-Retry-After` y también `Retry-After`, que es el header estándar de HTTP. Los segundos se redondean hacia arriba para que el cliente no reintente antes de tiempo.
+- La regla se lee de `appsettings.json` al iniciar. Una regla inválida impide que la aplicación arranque, en lugar de fallar con el primer request. Cambiar la regla requiere reiniciar la aplicación.
+- El registro es un singleton: una única instancia compartida por todos los requests. Por eso el estado es por instancia de la aplicación; con varias instancias cada una aplicaría su propio límite.
+- Hay dos tipos de tests. Los del middleware lo prueban aislado, con un request armado a mano y el reloj falso. Los de la API la levantan completa en memoria y verifican que la configuración, el middleware y el endpoint están bien conectados.
+
 
 # Alternativas consideradas (librería de Microsoft)
 
@@ -103,5 +131,45 @@ Es por ello que decidi no utilizarla para este desafio, pero en un ambiente prod
 
 # Ejecutar el proyecto
 
-[completar al final del proyecto]
+Se necesita el SDK de .NET 8 o superior. Todos los comandos se ejecutan desde la carpeta `rate-limiter`.
+
+Compilar:
+
+```
+dotnet build
+```
+
+Ejecutar los tests:
+
+```
+dotnet test
+```
+
+Levantar la API (queda escuchando en `http://localhost:5277`):
+
+```
+dotnet run --project src/RateLimiter.Api
+```
+
+Enviar un request desde otra terminal:
+
+```
+curl -i http://localhost:5277/ping
+```
+
+Con la configuración por defecto se permiten 5 requests cada 10 segundos por IP. Los primeros responden `200` con los headers `X-Ratelimit-Limit` y `X-Ratelimit-Remaining`. Al superar el límite responde `429` con `X-Ratelimit-Retry-After`.
+
+La regla se cambia en `src/RateLimiter.Api/appsettings.json`:
+
+```json
+"RateLimiter": {
+  "Algorithm": "TokenBucket",
+  "Limit": 5,
+  "Window": "00:00:10"
+}
+```
+
+- `Algorithm`: `TokenBucket` o `SlidingWindowCounter`.
+- `Limit`: cantidad de requests permitidos por ventana.
+- `Window`: duración de la ventana, en formato `hh:mm:ss`.
 
