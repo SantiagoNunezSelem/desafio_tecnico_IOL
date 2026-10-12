@@ -6,6 +6,10 @@ using RateLimiter.Core;
 namespace RateLimiter.Tests;
 
 // Levantan la API completa en memoria y se envian requests HTTP
+
+// Comparte la coleccion "Metrics" con los tests del middleware. Permite que xUnit no ejecute en paralelo las
+// clases de una misma coleccion, y asi los requests de estos tests no alteran el conteo de metricas del otro
+[Collection("Metrics")]
 public class ApiTests
 {
     [Fact]

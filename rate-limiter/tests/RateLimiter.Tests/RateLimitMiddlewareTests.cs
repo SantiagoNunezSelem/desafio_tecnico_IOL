@@ -1,3 +1,4 @@
+using System.Diagnostics.Metrics;
 using System.Net;
 using Microsoft.AspNetCore.Http;
 using Microsoft.Extensions.Logging.Abstractions;
@@ -8,6 +9,7 @@ using RateLimiter.Core;
 namespace RateLimiter.Tests;
 
 // Prueban el middleware sin levantar la API
+[Collection("Metrics")]
 public class RateLimitMiddlewareTests
 {
     private readonly FakeTimeProvider _time = new();
@@ -94,6 +96,33 @@ public class RateLimitMiddlewareTests
         HttpResponse response = await SendRequest(middleware);
 
         Assert.Equal(StatusCodes.Status200OK, response.StatusCode);
+    }
+
+    [Fact]
+    public async Task AllowedAndRejectedRequests_AreCountedInTheMetrics()
+    {
+        // El listener se suscribe a los contadores del Meter "RateLimiter" y acumula lo que
+        // reportan, que es lo mismo que haria una herramienta de monitoreo.
+        var totals = new Dictionary<string, long>();
+        using var listener = new MeterListener();
+        listener.InstrumentPublished = (instrument, meterListener) =>
+        {
+            if (instrument.Meter.Name == "RateLimiter")
+            {
+                meterListener.EnableMeasurementEvents(instrument);
+            }
+        };
+        listener.SetMeasurementEventCallback<long>((instrument, value, tags, state) =>
+            totals[instrument.Name] = totals.GetValueOrDefault(instrument.Name) + value);
+        listener.Start();
+
+        RateLimitMiddleware middleware = CreateMiddleware(limit: 2, TimeSpan.FromMinutes(1));
+        await SendRequest(middleware);
+        await SendRequest(middleware);
+        await SendRequest(middleware);
+
+        Assert.Equal(2, totals["rate_limiter.requests.allowed"]);
+        Assert.Equal(1, totals["rate_limiter.requests.rejected"]);
     }
 
     [Fact]

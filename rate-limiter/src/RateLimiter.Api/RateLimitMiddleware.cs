@@ -1,3 +1,4 @@
+using System.Diagnostics.Metrics;
 using RateLimiter.Core;
 
 namespace RateLimiter.Api;
@@ -6,6 +7,10 @@ namespace RateLimiter.Api;
 // la respuesta, deja pasar el request o lo corta con un HTTP 429.
 public sealed class RateLimitMiddleware
 {
+    private static readonly Meter Meter = new("RateLimiter");
+    private static readonly Counter<long> AllowedRequests = Meter.CreateCounter<long>("rate_limiter.requests.allowed");
+    private static readonly Counter<long> RejectedRequests = Meter.CreateCounter<long>("rate_limiter.requests.rejected");
+
     private readonly RequestDelegate _next;     // El siguiente paso del pipeline (otro middleware o el endpoint)
     private readonly RateLimiterRegistry _registry;
     private readonly ILogger<RateLimitMiddleware> _logger;
@@ -28,9 +33,12 @@ public sealed class RateLimitMiddleware
 
         if (decision.IsAllowed)
         {
+            AllowedRequests.Add(1);
             await _next(context);
             return;
         }
+
+        RejectedRequests.Add(1);
 
         string retryAfterSeconds = Math.Ceiling(decision.RetryAfter.TotalSeconds).ToString();
 

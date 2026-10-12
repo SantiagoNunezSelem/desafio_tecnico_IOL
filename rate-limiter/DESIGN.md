@@ -121,6 +121,7 @@ El sliding window counter mantiene el total cerca de 5 en cualquier minuto.
 - La regla se lee de `appsettings.json` al iniciar. Una regla inválida impide que la aplicación arranque, en lugar de fallar con el primer request. Cambiar la regla requiere reiniciar la aplicación.
 - El registro es un singleton: una única instancia compartida por todos los requests. Por eso el estado es por instancia de la aplicación; con varias instancias cada una aplicaría su propio límite.
 - Hay dos tipos de tests. Los del middleware lo prueban aislado, con un request armado a mano y el reloj falso. Los de la API la levantan completa en memoria y verifican que la configuración, el middleware y el endpoint están bien conectados.
+- Métricas: el middleware cuenta los requests aceptados y los rechazados con `System.Diagnostics.Metrics`, que viene incluido en .NET. No se etiquetan por IP: habría un valor distinto por cliente y eso es costoso para cualquier sistema de monitoreo. El detalle por cliente queda en el log.
 
 
 # Alternativas consideradas (librería de Microsoft)
@@ -172,6 +173,24 @@ La regla se cambia en `src/RateLimiter.Api/appsettings.json`:
 - `Algorithm`: `TokenBucket` o `SlidingWindowCounter`.
 - `Limit`: cantidad de requests permitidos por ventana.
 - `Window`: duración de la ventana, en formato `hh:mm:ss`.
+
+## Ver las métricas (opcional)
+
+La API publica dos contadores bajo el nombre `RateLimiter`: `rate_limiter.requests.allowed` y `rate_limiter.requests.rejected`. Se pueden ver en vivo con `dotnet-counters`, una herramienta de Microsoft.
+
+Instalarla (una sola vez):
+
+```
+dotnet tool install --global dotnet-counters
+```
+
+Con la API levantada, en otra terminal:
+
+```
+dotnet-counters monitor --name RateLimiter.Api --counters RateLimiter
+```
+
+Al enviar requests con `curl`, muestra cuántos se aceptaron y cuántos se rechazaron en el último segundo.
 
 ## Con Docker (opcional)
 
